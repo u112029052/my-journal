@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>我的日記本</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&display=swap">
+<style>
+:root{--bg:#e9eef2;--paper:#fbfcfd;--ink:#1d2b3a;--mute:#6b7a89;--line:#d3dce4;--accent:#2f5d8a;--hl:#f2c14e;--ok:#3f8f6b;--danger:#c0504d}
+@media(prefers-color-scheme:dark){:root{--bg:#141a21;--paper:#1d252e;--ink:#e6ecf1;--mute:#93a1af;--line:#2f3b47;--accent:#7fb0df;--hl:#d9a830;--ok:#6cc39a;--danger:#e07b78}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 system-ui,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;padding:16px}
+h1,h2{font-family:"Noto Serif TC",serif;margin:0}
+.app{max-width:1000px;margin:0 auto;display:grid;grid-template-columns:340px 1fr;gap:16px}
+@media(max-width:760px){.app{grid-template-columns:1fr}}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px}
+.side{display:flex;flex-direction:column;gap:16px}
+.head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.head h2{font-size:20px}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:6px;padding:4px 10px}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+.wd{color:var(--mute);font-size:13px}
+.day{position:relative;aspect-ratio:1;border:0;border-radius:6px;padding:0}
+.day.today{border:1px solid var(--accent)}
+.day.sel{background:var(--accent);color:#fff}
+.day.out{visibility:hidden}
+.dots{position:absolute;bottom:3px;left:0;right:0;display:flex;justify-content:center;gap:3px}
+.dots i{width:5px;height:5px;border-radius:50%;background:var(--hl)}
+.dots i.t{background:var(--ok)}
+.legend{font-size:13px;color:var(--mute);margin-top:8px}
+.legend b{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--hl);margin:0 4px 0 0}
+.legend b.t{background:var(--ok);margin-left:10px}
+.title{font-size:22px;margin-bottom:12px}
+.moods{display:flex;gap:6px;margin-bottom:10px}
+.moods button{font-size:22px;padding:2px 8px}
+.moods button.on{background:var(--hl);border-color:var(--hl)}
+input[type=text]{width:100%;font:inherit;color:inherit;background:transparent;border:0;border-bottom:1px solid var(--line);padding:6px 2px}
+textarea{width:100%;min-height:220px;resize:vertical;font:inherit;line-height:1.9;color:inherit;background:repeating-linear-gradient(transparent 0 30px,var(--line) 30px 31px);border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin-top:10px}
+.bar{display:flex;align-items:center;gap:10px;margin-top:10px}
+.msg{color:var(--ok);font-size:14px}
+ul{list-style:none;margin:8px 0;padding:0}
+li{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line)}
+li span{flex:1}
+li.done span{text-decoration:line-through;color:var(--mute)}
+li button{border:0;color:var(--danger)}
+.add{display:flex;gap:8px}
+.empty{color:var(--mute);font-size:14px}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <section class="card" aria-label="月曆">
+      <div class="head">
+        <button id="prev" aria-label="上個月">‹</button>
+        <h2 id="monthTitle"></h2>
+        <button id="next" aria-label="下個月">›</button>
+      </div>
+      <div class="grid" id="wds"></div>
+      <div class="grid" id="days"></div>
+      <div class="legend"><b></b>有日記<b class="t"></b>有待辦<button id="todayBtn" style="float:right">回到今天</button></div>
+    </section>
+    <section class="card" aria-label="待辦事項">
+      <h2 style="font-size:18px">待辦事項</h2>
+      <ul id="todos"></ul>
+      <div class="add"><input type="text" id="todoIn" placeholder="新增待辦，按 Enter 送出" maxlength="80"><button class="primary" id="todoAdd">新增</button></div>
+    </section>
+  </aside>
+  <main class="card" aria-label="日記">
+    <h1 class="title" id="dateTitle"></h1>
+    <div class="moods" id="moods" role="group" aria-label="今天的心情"></div>
+    <input type="text" id="dTitle" placeholder="今天的標題" maxlength="40">
+    <textarea id="dText" placeholder="今天發生了什麼事？"></textarea>
+    <div class="bar"><button class="primary" id="save">儲存日記</button><button id="del">清除這天日記</button><span class="msg" id="msg"></span></div>
+  </main>
+</div>
+<script>
+const KEY='diary-app-v1', MOODS=['😊','😌','😐','😢','😡'];
+const $=id=>document.getElementById(id);
+const pad=n=>String(n).padStart(2,'0');
+const fmt=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+let db={diaries:{},todos:{}};
+try{db=Object.assign(db,JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(e){}
+const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){alert('無法儲存資料，請檢查瀏覽器設定')}};
+let today=fmt(new Date()), sel=today, view=new Date(), mood='';
+view.setDate(1);
+
+function renderCal(){
+  $('monthTitle').textContent=`${view.getFullYear()} 年 ${view.getMonth()+1} 月`;
+  const y=view.getFullYear(),m=view.getMonth(),first=new Date(y,m,1).getDay(),n=new Date(y,m+1,0).getDate();
+  let h='';
+  for(let i=0;i<first;i++)h+='<button class="day out" tabindex="-1"></button>';
+  for(let d=1;d<=n;d++){
+    const k=`${y}-${pad(m+1)}-${pad(d)}`, hasD=db.diaries[k]&&(db.diaries[k].text||db.diaries[k].title), hasT=(db.todos[k]||[]).length;
+    h+=`<button class="day${k===today?' today':''}${k===sel?' sel':''}" data-k="${k}">${d}<span class="dots">${hasD?'<i></i>':''}${hasT?'<i class="t"></i>':''}</span></button>`;
+  }
+  $('days').innerHTML=h;
+}
+function renderDay(){
+  const [y,m,d]=sel.split('-').map(Number), w='日一二三四五六'[new Date(y,m-1,d).getDay()];
+  $('dateTitle').textContent=`${y} 年 ${m} 月 ${d} 日（週${w}）`;
+  const e=db.diaries[sel]||{};
+  mood=e.mood||''; $('dTitle').value=e.title||''; $('dText').value=e.text||''; $('msg').textContent='';
+  renderMoods(); renderTodos();
+}
+function renderMoods(){
+  $('moods').innerHTML=MOODS.map(x=>`<button data-m="${x}" class="${x===mood?'on':''}" aria-pressed="${x===mood}">${x}</button>`).join('');
+}
+function renderTodos(){
+  const list=db.todos[sel]||[];
+  $('todos').innerHTML=list.length?list.map(t=>`<li class="${t.done?'done':''}"><input type="checkbox" data-id="${t.id}" ${t.done?'checked':''} aria-label="完成"><span></span><button data-del="${t.id}" aria-label="刪除">✕</button></li>`).join(''):'<li class="empty">這天還沒有待辦事項</li>';
+  [...$('todos').querySelectorAll('li span')].forEach((s,i)=>s.textContent=list[i].text);
+}
+function select(k){sel=k;const [y,m]=k.split('-').map(Number);view=new Date(y,m-1,1);renderCal();renderDay()}
+
+$('days').onclick=e=>{const b=e.target.closest('[data-k]');if(b)select(b.dataset.k)};
+$('prev').onclick=()=>{view.setMonth(view.getMonth()-1);renderCal()};
+$('next').onclick=()=>{view.setMonth(view.getMonth()+1);renderCal()};
+$('todayBtn').onclick=()=>select(today);
+$('moods').onclick=e=>{const b=e.target.closest('[data-m]');if(!b)return;mood=mood===b.dataset.m?'':b.dataset.m;renderMoods()};
+$('save').onclick=()=>{
+  const title=$('dTitle').value.trim(),text=$('dText').value.trim();
+  if(!title&&!text&&!mood){delete db.diaries[sel]}else db.diaries[sel]={mood,title,text};
+  persist();renderCal();$('msg').textContent='已儲存 ✓';
+};
+$('del').onclick=()=>{if(confirm('確定要清除這天的日記嗎？')){delete db.diaries[sel];persist();renderCal();renderDay()}};
+function addTodo(){
+  const v=$('todoIn').value.trim();if(!v)return;
+  (db.todos[sel]=db.todos[sel]||[]).push({id:Date.now(),text:v,done:false});
+  $('todoIn').value='';persist();renderTodos();renderCal();
+}
+$('todoAdd').onclick=addTodo;
+$('todoIn').onkeydown=e=>{if(e.key==='Enter')addTodo()};
+$('todos').onclick=e=>{
+  const list=db.todos[sel]||[];
+  if(e.target.dataset.id){const t=list.find(x=>x.id==e.target.dataset.id);t.done=e.target.checked}
+  else if(e.target.dataset.del){db.todos[sel]=list.filter(x=>x.id!=e.target.dataset.del);if(!db.todos[sel].length)delete db.todos[sel]}
+  else return;
+  persist();renderTodos();renderCal();
+};
+$('wds').innerHTML=[...'日一二三四五六'].map(x=>`<div class="wd">${x}</div>`).join('');
+renderCal();renderDay();
+</script>
+</body>
+</html>
